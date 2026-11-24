@@ -1,0 +1,185 @@
+import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
+import { Placeholder } from "@tiptap/extension-placeholder";
+import { StarterKit } from "@tiptap/starter-kit";
+import { TextStyle } from "@tiptap/extension-text-style";
+import { Mention, LinkExtension, Color, CommentImage } from "@docmost/editor-ext";
+import classes from "./comment.module.css";
+import { useFocusWithin } from "@mantine/hooks";
+import clsx from "clsx";
+import { forwardRef, useEffect, useImperativeHandle } from "react";
+import { useTranslation } from "react-i18next";
+import EmojiCommand from "@/features/editor/extensions/emoji-command";
+import mentionRenderItems from "@/features/editor/components/mention/mention-suggestion";
+import MentionView from "@/features/editor/components/mention/mention-view";
+import { platformModifierKey } from "@/lib";
+import { TaskList, TaskItem } from "@tiptap/extension-list";
+
+// A div gives even plain-text HTML cells a block boundary in the comment schema.
+function separateTableCells(html: string): string {
+  if (!/<t[dh]\b/i.test(html)) return html;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const range = document.createRange();
+  for (const cell of template.content.querySelectorAll("th, td")) {
+    range.selectNodeContents(cell);
+    range.surroundContents(document.createElement("div"));
+  }
+  return template.innerHTML;
+}
+
+interface CommentEditorProps {
+  defaultContent?: any;
+  onUpdate?: any;
+  onSave?: any;
+  editable: boolean;
+  placeholder?: string;
+  autofocus?: boolean;
+  surface?: "default" | "muted";
+}
+
+const CommentEditor = forwardRef(
+  (
+    {
+      defaultContent,
+      onUpdate,
+      onSave,
+      editable,
+      placeholder,
+      autofocus,
+      surface,
+    }: CommentEditorProps,
+    ref,
+  ) => {
+    const { t } = useTranslation();
+    const { ref: focusRef, focused } = useFocusWithin();
+
+    const commentEditor = useEditor({
+      extensions: [
+        StarterKit.configure({
+          gapcursor: false,
+          dropcursor: false,
+          link: false,
+        }),
+        Placeholder.configure({
+          placeholder: placeholder || t("Reply..."),
+        }),
+        LinkExtension,
+        TextStyle,
+        Color,
+        CommentImage,
+        EmojiCommand,
+        Mention.configure({
+          suggestion: {
+            allowSpaces: true,
+            items: () => [],
+            // @ts-ignore
+            render: mentionRenderItems,
+          },
+          HTMLAttributes: {
+            class: "mention",
+          },
+        }).extend({
+          addNodeView() {
+            this.editor.isInitialized = true;
+            return ReactNodeViewRenderer(MentionView);
+          },
+        }),
+        TaskList,
+        TaskItem.configure({
+          nested: true,
+        }),
+      ],
+      editorProps: {
+        transformPastedHTML: separateTableCells,
+        attributes: {
+          "aria-label": placeholder || t("Comment"),
+        },
+        handleDOMEvents: {
+          keydown: (_view, event) => {
+            if (
+              [
+                "ArrowUp",
+                "ArrowDown",
+                "ArrowLeft",
+                "ArrowRight",
+                "Enter",
+              ].includes(event.key)
+            ) {
+              const emojiCommand = document.querySelector("#emoji-command");
+              if (emojiCommand) {
+                return true;
+              }
+              // ProseMirror forwards these keys to the mention list
+              const mentionPopup = document.querySelector("#mention");
+              if (mentionPopup) {
+                return false;
+              }
+            }
+
+            if (platformModifierKey(event) && event.code === "Enter") {
+              event.preventDefault();
+              if (onSave) onSave();
+
+              return true;
+            }
+          },
+        },
+      },
+      onUpdate({ editor }) {
+        if (onUpdate) onUpdate(editor.getJSON());
+      },
+      content: defaultContent,
+      editable,
+      textDirection: "auto",
+      immediatelyRender: true,
+      shouldRerenderOnTransaction: false,
+      autofocus: (autofocus && "end") || false,
+    });
+
+    // Sync content from props for read-only editors (e.g. when updated via
+    // websocket on another browser). Skip for editable editors to avoid
+    // resetting the cursor position on every keystroke.
+    useEffect(() => {
+      if (
+        !editable &&
+        commentEditor &&
+        !commentEditor.isDestroyed &&
+        defaultContent
+      ) {
+        commentEditor.commands.setContent(defaultContent);
+      }
+    }, [defaultContent, editable, commentEditor]);
+
+    useEffect(() => {
+      setTimeout(() => {
+        if (autofocus && commentEditor && !commentEditor.isDestroyed) {
+          commentEditor.commands.focus("end");
+        }
+      }, 10);
+    }, [commentEditor, autofocus]);
+
+    useImperativeHandle(ref, () => ({
+      clearContent: () => {
+        if (commentEditor && !commentEditor.isDestroyed) {
+          commentEditor.commands.clearContent();
+        }
+      },
+    }));
+
+    return (
+      <div
+        ref={focusRef}
+        className={classes.commentEditor}
+        data-editable={editable || undefined}
+        data-surface={surface}
+      >
+        <EditorContent
+          editor={commentEditor}
+          className={clsx(classes.ProseMirror, { [classes.focused]: focused })}
+        />
+      </div>
+    );
+  },
+);
+
+export default CommentEditor;

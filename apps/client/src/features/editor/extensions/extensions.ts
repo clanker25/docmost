@@ -1,0 +1,551 @@
+import { markInputRule, type Editor } from "@tiptap/core";
+import { EditableTemplateVariable } from "@/ee/template/components/template-variable-node";
+import { StarterKit } from "@tiptap/starter-kit";
+import { TiptapDocument } from "@/features/editor/extensions/document";
+import { Code } from "@tiptap/extension-code";
+import { TextAlign } from "@tiptap/extension-text-align";
+import { TaskList } from "@tiptap/extension-list";
+import { CharacterCount, UndoRedo } from "@tiptap/extensions";
+import { Placeholder } from "@/features/editor/extensions/placeholder";
+import { TemplatePlaceholder } from "@/features/editor/extensions/template-placeholder";
+import { Superscript } from "@tiptap/extension-superscript";
+import SubScript from "@tiptap/extension-subscript";
+import { Typography } from "@tiptap/extension-typography";
+import { TextStyle } from "@tiptap/extension-text-style";
+import { Youtube } from "@tiptap/extension-youtube";
+import SlashCommand, {
+  SlashCommandExtension as Command,
+} from "@/features/editor/extensions/slash-command";
+import renderItems from "@/features/editor/components/slash-menu/render-items";
+import getSuggestionItems from "@/features/editor/components/slash-menu/menu-items";
+import { Collaboration, isChangeOrigin } from "@tiptap/extension-collaboration";
+import { CollaborationCaret } from "@tiptap/extension-collaboration-caret";
+import { HocuspocusProvider } from "@hocuspocus/provider";
+import {
+  Comment,
+  Details,
+  DetailsContent,
+  DetailsSummary,
+  MathBlock,
+  MathInline,
+  TableCell,
+  TableRow,
+  TableHeader,
+  CustomTable,
+  TrailingNode,
+  TiptapImage,
+  Callout,
+  TiptapVideo,
+  TiptapAudio,
+  LinkExtension,
+  Selection,
+  Attachment,
+  CustomCodeBlock,
+  Drawio,
+  Excalidraw,
+  Embed,
+  TiptapPdf,
+  PageBreak,
+  SearchAndReplace,
+  Mention,
+  TableDndExtension,
+  TableHandleCommandsExtension,
+  TableHeaderPin,
+  TableReadonlySort,
+  Subpages,
+  RecentlyUpdated,
+  ItemsByLabel,
+  Heading,
+  SectionAnchor,
+  Highlight,
+  Color,
+  Indent,
+  ListItem,
+  TaskItem,
+  UniqueID,
+  SharedStorage,
+  IntegrationCard,
+  IntegrationMention,
+  MicrosoftFile,
+  MicrosoftFolder,
+  Columns,
+  Column,
+  Status,
+  DateNode,
+  TransclusionSource,
+  TransclusionReference,
+  TableView,
+  BaseEmbed as BaseEmbedNode,
+  Footnotes,
+  Footnote,
+  FootnoteReference,
+  Tabs,
+  Tab,
+  TabLabel,
+  TabPanel,
+} from "@docmost/editor-ext";
+import {
+  randomElement,
+  userColors,
+} from "@/features/editor/extensions/utils.ts";
+import { IUser } from "@/features/user/types/user.types.ts";
+import {
+  createImageHandle,
+  imageResizeClasses,
+} from "@/features/editor/components/image/image-resize-handles.ts";
+import {
+  createResizeHandle,
+  buildResizeClasses,
+} from "@/features/editor/components/common/node-resize-handles.ts";
+import MathInlineView from "@/features/editor/components/math/math-inline.tsx";
+import MathBlockView from "@/features/editor/components/math/math-block.tsx";
+import ImageView from "@/features/editor/components/image/image-view.tsx";
+import CalloutView from "@/features/editor/components/callout/callout-view.tsx";
+import StatusView from "@/features/editor/components/status/status-view.tsx";
+import DateView from "@/features/editor/components/date/date-view";
+import VideoView from "@/features/editor/components/video/video-view.tsx";
+import AudioView from "@/features/editor/components/audio/audio-view.tsx";
+import AttachmentView from "@/features/editor/components/attachment/attachment-view.tsx";
+import CodeBlockView from "@/features/editor/components/code-block/code-block-view.tsx";
+import DrawioView from "../components/drawio/drawio-view";
+import ExcalidrawView from "@/features/editor/components/excalidraw/excalidraw-view-lazy.tsx";
+import EmbedView from "@/features/editor/components/embed/embed-view.tsx";
+import PdfView from "@/features/editor/components/pdf/pdf-view.tsx";
+import SubpagesView from "@/features/editor/components/subpages/subpages-view.tsx";
+import RecentlyUpdatedView from "@/features/editor/components/recently-updated/recently-updated-view.tsx";
+import { PagesByLabelView } from "@/features/editor/components/pages-by-label/pages-by-label-view";
+import IntegrationCardView from "@/features/editor/components/integration-link/integration-card-view.tsx";
+import IntegrationMentionView from "@/features/editor/components/integration-link/integration-mention-view.tsx";
+import { IntegrationPasteMenuExtension } from "@/features/editor/extensions/integration-paste-menu";
+import { BasePasteMenuExtension } from "@/features/editor/extensions/base-paste-menu";
+import TabsView from "@/features/editor/components/tabs/tabs-view.tsx";
+import TransclusionView from "@/features/editor/components/transclusion/transclusion-view.tsx";
+import TransclusionReferenceView from "@/features/editor/components/transclusion/transclusion-reference-view.tsx";
+import { BaseEmbedView } from "@/features/editor/components/base-embed/base-embed-view.tsx";
+import { isCalendarEventDrag } from "@/ee/base/components/calendar/calendar-frame";
+import MicrosoftFileView from "@/features/editor/components/microsoft/microsoft-file-view.tsx";
+import MicrosoftFolderView from "@/features/editor/components/microsoft/microsoft-folder-view.tsx";
+import { common, createLowlight } from "lowlight";
+import plaintext from "highlight.js/lib/languages/plaintext";
+import powershell from "highlight.js/lib/languages/powershell";
+import abap from "highlightjs-sap-abap";
+import elixir from "highlight.js/lib/languages/elixir";
+import erlang from "highlight.js/lib/languages/erlang";
+import dockerfile from "highlight.js/lib/languages/dockerfile";
+import clojure from "highlight.js/lib/languages/clojure";
+import fortran from "highlight.js/lib/languages/fortran";
+import haskell from "highlight.js/lib/languages/haskell";
+import scala from "highlight.js/lib/languages/scala";
+import mentionRenderItems from "@/features/editor/components/mention/mention-suggestion.ts";
+import { ReactNodeViewRenderer, ReactMarkViewRenderer } from "@tiptap/react";
+import MentionView from "@/features/editor/components/mention/mention-view.tsx";
+import LinkView from "@/features/editor/components/link/link-view.tsx";
+import i18n from "@/i18n.ts";
+import { MarkdownClipboard } from "@/features/editor/extensions/markdown-clipboard.ts";
+import EmojiCommand from "./emoji-command";
+import { countWords } from "alfaaz";
+import AutoJoiner from "@/features/editor/extensions/autojoiner.ts";
+import GlobalDragHandle from "@/features/editor/extensions/drag-handle.ts";
+import { CleanStyles } from "@/features/editor/extensions/clean-styles.ts";
+
+const lowlight = createLowlight(common);
+lowlight.register("mermaid", plaintext);
+lowlight.register("powershell", powershell);
+lowlight.register("abap", abap);
+lowlight.register("erlang", erlang);
+lowlight.register("elixir", elixir);
+lowlight.register("dockerfile", dockerfile);
+lowlight.register("clojure", clojure);
+lowlight.register("fortran", fortran);
+lowlight.register("haskell", haskell);
+lowlight.register("scala", scala);
+
+// @ts-ignore
+export const mainExtensions = [
+  StarterKit.configure({
+    document: false,
+    heading: false,
+    undoRedo: false,
+    link: false,
+    trailingNode: false,
+    listItem: false,
+    dropcursor: {
+      width: 3,
+      color: "#70CFF8",
+    },
+    codeBlock: false,
+    code: false,
+  }),
+  TiptapDocument,
+  // Override TipTap's Code extension to fix the inline code input rule.
+  // The upstream regex /(^|[^`])`([^`]+)`(?!`)$/ captures the character
+  // before the opening backtick as part of the match, causing markInputRule
+  // to delete it. Using a lookbehind avoids including it in the match.
+  Code.configure({
+    HTMLAttributes: {
+      spellcheck: false,
+    },
+  }).extend({
+    addInputRules() {
+      return [
+        markInputRule({
+          find: /(?:^|(?<=[^`]))`([^`]+)`(?!`)$/,
+          type: this.type,
+        }),
+      ];
+    },
+    addKeyboardShortcuts() {
+      return {
+        Enter: ({ editor }) => {
+          const { from, to } = editor.state.selection;
+          if (from !== to) return false;
+          if (!editor.isActive("code")) return false;
+
+          const $from = editor.state.doc.resolve(from);
+          const codeType = editor.state.schema.marks.code;
+          const nodeAfter = $from.nodeAfter;
+
+          if (nodeAfter && codeType.isInSet(nodeAfter.marks)) {
+            return false;
+          }
+
+          return editor.chain().unsetCode().splitBlock().run();
+        },
+      };
+    },
+  }),
+  SharedStorage,
+  Heading.configure({ translate: (label) => i18n.t(label) }),
+  SectionAnchor,
+  UniqueID.configure({
+    types: ["heading", "paragraph", "transclusionSource", "sectionAnchor"],
+    filterTransaction: (transaction) => !isChangeOrigin(transaction),
+  }),
+  Placeholder.configure({
+    placeholder: ({ editor, node, pos }) => {
+      if (node.type.name === "heading") {
+        return i18n.t("Heading {{level}}", { level: node.attrs.level });
+      }
+      if (node.type.name === "detailsSummary") {
+        return i18n.t("Toggle title");
+      }
+      if (node.type.name === "paragraph") {
+        const doc = editor.state.doc;
+        if (pos >= 0 && pos <= doc.content.size) {
+          const parentName = doc.resolve(pos).parent.type.name;
+          if (
+            parentName === "column" ||
+            parentName === "tableCell" ||
+            parentName === "tableHeader" ||
+            parentName === "callout" ||
+            parentName === "blockquote" ||
+            parentName === "footnote"
+          ) {
+            return i18n.t("Write...");
+          }
+        }
+        return i18n.t('Write anything. Enter "/" for commands');
+      }
+    },
+    includeChildren: true,
+    showOnlyWhenEditable: true,
+  }),
+  TextAlign.configure({ types: ["heading", "paragraph"] }),
+  Indent,
+  ListItem,
+  TaskList,
+  TaskItem.configure({
+    nested: true,
+  }),
+  LinkExtension.configure({
+    openOnClick: false,
+  }).extend({
+    addMarkView() {
+      return ReactMarkViewRenderer(LinkView);
+    },
+  }),
+  Superscript,
+  SubScript,
+  Highlight.configure({
+    multicolor: true,
+  }),
+  Typography,
+  TrailingNode,
+  GlobalDragHandle.configure({
+    customNodes: ["transclusionSource", "transclusionReference", "tabPanel"],
+    atomNodes: ["base"],
+  }),
+  TextStyle,
+  Color,
+  SlashCommand,
+  EmojiCommand,
+  Comment.configure({
+    HTMLAttributes: {
+      class: "comment-mark",
+    },
+  }),
+  Mention.configure({
+    suggestion: {
+      allowSpaces: true,
+      items: () => {
+        return [];
+      },
+      // @ts-ignore
+      render: mentionRenderItems,
+    },
+    HTMLAttributes: {
+      class: "mention",
+    },
+  }).extend({
+    addNodeView() {
+      // Force the react node view to render immediately using flush sync (https://github.com/ueberdosis/tiptap/blob/b4db352f839e1d82f9add6ee7fb45561336286d8/packages/react/src/ReactRenderer.tsx#L183-L191)
+      this.editor.isInitialized = true;
+
+      return ReactNodeViewRenderer(MentionView);
+    },
+  }),
+  CustomTable.configure({
+    resizable: true,
+    lastColumnResizable: true,
+    allowTableNodeSelection: true,
+    cellMinWidth: 49,
+    View: TableView,
+  }),
+  TableRow,
+  TableCell,
+  TableHeader,
+  TableDndExtension,
+  TableHandleCommandsExtension,
+  TableHeaderPin,
+  TableReadonlySort,
+  MathInline.configure({
+    view: MathInlineView,
+  }),
+  MathBlock.configure({
+    view: MathBlockView,
+  }),
+  Details,
+  DetailsSummary,
+  DetailsContent,
+  Tabs.configure({
+    view: TabsView,
+  }),
+  Tab,
+  TabLabel,
+  TabPanel,
+  Youtube.configure({
+    addPasteHandler: false,
+    controls: true,
+    nocookie: true,
+  }),
+  TiptapImage.configure({
+    view: ImageView,
+    allowBase64: false,
+    resize: {
+      enabled: true,
+      directions: ["left", "right"],
+      minWidth: 24,
+      minHeight: 16,
+      alwaysPreserveAspectRatio: true,
+      //@ts-ignore
+      createCustomHandle: createImageHandle,
+      className: imageResizeClasses,
+    },
+  }),
+  TiptapVideo.configure({
+    view: VideoView,
+    resize: {
+      enabled: true,
+      directions: ["left", "right"],
+      minWidth: 24,
+      minHeight: 16,
+      alwaysPreserveAspectRatio: true,
+      //@ts-ignore
+      createCustomHandle: createResizeHandle,
+      className: buildResizeClasses("node-video"),
+    },
+  }),
+  TiptapAudio.configure({
+    view: AudioView,
+  }),
+  Callout.configure({
+    view: CalloutView,
+  }),
+  CustomCodeBlock.configure({
+    view: CodeBlockView,
+    //@ts-ignore
+    lowlight,
+    enableTabIndentation: true,
+    tabSize: 2,
+    HTMLAttributes: {
+      spellcheck: false,
+    },
+  }),
+  Selection,
+  Attachment.configure({
+    view: AttachmentView,
+  }),
+  Drawio.configure({
+    view: DrawioView,
+    resize: {
+      enabled: true,
+      directions: ["left", "right"],
+      minWidth: 24,
+      minHeight: 16,
+      alwaysPreserveAspectRatio: true,
+      //@ts-ignore
+      createCustomHandle: createResizeHandle,
+      className: buildResizeClasses("node-drawio"),
+    },
+  }),
+  Excalidraw.configure({
+    view: ExcalidrawView,
+    resize: {
+      enabled: true,
+      directions: ["left", "right"],
+      minWidth: 24,
+      minHeight: 16,
+      alwaysPreserveAspectRatio: true,
+      //@ts-ignore
+      createCustomHandle: createResizeHandle,
+      className: buildResizeClasses("node-excalidraw"),
+    },
+  }),
+  Embed.configure({
+    view: EmbedView,
+  }),
+  TiptapPdf.configure({
+    view: PdfView,
+  }),
+  PageBreak,
+  Subpages.configure({
+    view: SubpagesView,
+  }),
+  RecentlyUpdated.configure({
+    view: RecentlyUpdatedView,
+  }),
+  ItemsByLabel.configure({
+    defaultHeading: () => i18n.t("Pages by label"),
+    view: PagesByLabelView,
+  }),
+  IntegrationCard.configure({
+    view: IntegrationCardView,
+  }),
+  IntegrationMention.configure({
+    view: IntegrationMentionView,
+  }),
+  IntegrationPasteMenuExtension,
+  BasePasteMenuExtension,
+  MicrosoftFile.configure({
+    view: MicrosoftFileView,
+  }),
+  MicrosoftFolder.configure({
+    view: MicrosoftFolderView,
+  }),
+  Status.configure({
+    view: StatusView,
+  }),
+  TemplatePlaceholder,
+  DateNode.configure({ locale: () => i18n.resolvedLanguage || "en-US" }).extend({
+    addNodeView() {
+      return ReactNodeViewRenderer(DateView);
+    },
+  }),
+  TransclusionSource.configure({
+    view: TransclusionView,
+  }),
+  TransclusionReference.configure({
+    view: TransclusionReferenceView,
+  }),
+  BaseEmbedNode.extend({
+    addNodeView() {
+      return (props) => {
+        const nodeView = ReactNodeViewRenderer(BaseEmbedView)(props);
+        const defaultStopEvent = nodeView.stopEvent?.bind(nodeView);
+        nodeView.stopEvent = (event) =>
+          isCalendarEventDrag(event) || !!defaultStopEvent?.(event);
+        return nodeView;
+      };
+    },
+  }),
+  MarkdownClipboard.configure({
+    transformPastedText: true,
+  }),
+  CleanStyles,
+  CharacterCount.configure({
+    wordCounter: (text) => countWords(text),
+  }),
+  SearchAndReplace.extend({
+    addKeyboardShortcuts() {
+      return {
+        "Mod-f": () => {
+          const event = new CustomEvent("openFindDialogFromEditor", {});
+          document.dispatchEvent(event);
+          return true;
+        },
+        Escape: () => {
+          const event = new CustomEvent("closeFindDialogFromEditor", {});
+          document.dispatchEvent(event);
+          return false;
+        },
+      };
+    },
+  }).configure(),
+  Columns,
+  Column,
+  Footnotes,
+  Footnote,
+  FootnoteReference,
+  AutoJoiner.configure({
+    elementsToJoin: [],
+  }),
+] as any;
+
+type CollabExtensions = (provider: HocuspocusProvider, user: IUser) => any[];
+
+const TEMPLATE_EXCLUDED_SLASH_ITEMS = new Set([
+  "Synced block",
+  "Base (Inline)",
+  "Kanban",
+  "Calendar",
+  "Form",
+  "SharePoint file"
+]);
+
+const TemplateSlashCommand = Command.configure({
+  suggestion: {
+    items: ({ query, editor }: { query: string; editor: Editor }) =>
+      getSuggestionItems({
+        query,
+        editor,
+        excludeItems: TEMPLATE_EXCLUDED_SLASH_ITEMS,
+      }),
+    render: renderItems,
+  },
+});
+
+export const getTemplateExtensions = (onEditPlaceholder: () => void) => [
+  ...mainExtensions.filter(
+    (ext: any) => ext !== SlashCommand && ext !== TemplatePlaceholder,
+  ),
+  TemplatePlaceholder.configure({ onEdit: onEditPlaceholder }),
+  EditableTemplateVariable,
+  TemplateSlashCommand,
+  UndoRedo,
+] as any;
+
+export const collabExtensions: CollabExtensions = (provider, user) => [
+  Collaboration.configure({
+    document: provider.document,
+    provider,
+  }),
+  CollaborationCaret.configure({
+    provider,
+    user: {
+      id: user.id,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      color: randomElement(userColors),
+    },
+  }),
+];

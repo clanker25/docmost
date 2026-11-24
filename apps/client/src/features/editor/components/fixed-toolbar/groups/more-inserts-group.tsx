@@ -1,0 +1,332 @@
+import { FC } from "react";
+import type { Editor } from "@tiptap/react";
+import { ActionIcon, Menu, Tooltip } from "@mantine/core";
+import {
+  IconAppWindow,
+  IconCalendar,
+  IconCalendarMonth,
+  IconCaretRightFilled,
+  IconChevronDown,
+  IconClockHour3,
+  IconCursorText,
+  IconForms,
+  IconInfoCircle,
+  IconLayoutKanban,
+  IconLayoutNavbar,
+  IconMath,
+  IconMathFunction,
+  IconRotate2,
+  IconSitemap,
+  IconSuperscript,
+  IconTable,
+  IconTag,
+  IconTags,
+  IconVariable,
+} from "@tabler/icons-react";
+import IconExcalidraw from "@/components/icons/icon-excalidraw";
+import IconMermaid from "@/components/icons/icon-mermaid";
+import IconDrawio from "@/components/icons/icon-drawio";
+import {
+  AirtableIcon,
+  FigmaIcon,
+  FramerIcon,
+  GoogleDriveIcon,
+  LoomIcon,
+  MiroIcon,
+  TypeformIcon,
+  VimeoIcon,
+  YoutubeIcon,
+} from "@/components/icons";
+import { useTranslation } from "react-i18next";
+import { insertBaseEmbedBlock } from "@/features/editor/components/base-embed/insert-base-embed";
+import { useHasFeature } from "@/ee/hooks/use-feature";
+import { Feature } from "@/ee/features";
+import { useUpgradeLabel } from "@/ee/hooks/use-upgrade-label";
+import { UpgradeBadge } from "@/ee/components/upgrade-badge";
+import { isBetaBaseForms } from "@/lib/config.ts";
+
+interface Props {
+  editor: Editor | null;
+  templateMode?: boolean;
+}
+
+export const MoreInsertsGroup: FC<Props> = ({ editor, templateMode }) => {
+  const { t } = useTranslation();
+  const hasBases = useHasFeature(Feature.BASES);
+  const upgradeLabel = useUpgradeLabel();
+
+  const setEmbed = (provider: string) =>
+    editor.chain().focus().setEmbed({ provider }).run();
+
+  const trigger = (
+    <Tooltip label={t("More inserts")} withArrow>
+      <ActionIcon
+        variant="subtle"
+        color="dark"
+        size="md"
+        aria-label={t("More inserts")}
+      >
+        <IconChevronDown size={16} />
+      </ActionIcon>
+    </Tooltip>
+  );
+  if (!editor) return trigger;
+
+  return (
+    <Menu shadow="md" position="bottom-start" withArrow={false} width={240}>
+      <Menu.Target>{trigger}</Menu.Target>
+      <Menu.Dropdown mah={400} style={{ overflowY: "auto" }}>
+        <Menu.Label>{t("Advanced")}</Menu.Label>
+        {templateMode && (
+          <Menu.Item
+            leftSection={<IconCursorText size={16} />}
+            disabled={!editor.can().editTemplatePlaceholder()}
+            onClick={() => editor.commands.editTemplatePlaceholder()}
+          >
+            {t("Placeholder text")}
+          </Menu.Item>
+        )}
+        <Menu.Item
+          leftSection={<IconInfoCircle size={16} />}
+          onClick={() => editor.chain().focus().toggleCallout().run()}
+        >
+          {t("Callout")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconCaretRightFilled size={16} />}
+          onClick={() => editor.chain().focus().setDetails().run()}
+        >
+          {t("Toggle block")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconLayoutNavbar size={16} />}
+          disabled={!editor.can().insertTabs()}
+          onClick={() => editor.chain().focus().insertTabs().run()}
+        >
+          {t("Tabs")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconTag size={16} />}
+          onClick={() =>
+            editor.chain().focus().setStatus({ text: "", color: "gray" }).run()
+          }
+        >
+          {t("Status")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconSitemap size={16} />}
+          onClick={() => editor.chain().focus().insertSubpages().run()}
+        >
+          {t("Subpages")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconClockHour3 size={16} />}
+          onClick={() => editor.chain().focus().insertRecentlyUpdated().run()}
+        >
+          {t("Recently updated")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconTags size={16} />}
+          onClick={() => editor.chain().focus().insertItemsByLabel().run()}
+        >
+          {t("Pages by label")}
+        </Menu.Item>
+        {!templateMode && (
+          <Menu.Item
+            leftSection={<IconRotate2 size={16} />}
+            onClick={() =>
+              editor.chain().focus().toggleTransclusionSource().run()
+            }
+          >
+            {t("Synced block")}
+          </Menu.Item>
+        )}
+        {!templateMode && (
+          <Tooltip label={upgradeLabel} disabled={hasBases} position="right">
+            <Menu.Item
+              leftSection={<IconTable size={16} />}
+              aria-disabled={!hasBases}
+              closeMenuOnClick={hasBases}
+              style={{ opacity: hasBases ? undefined : 0.7 }}
+              rightSection={!hasBases && <UpgradeBadge />}
+              onClick={() => {
+                if (hasBases) insertBaseEmbedBlock(editor);
+              }}
+            >
+              {t("Base (Inline)")}
+            </Menu.Item>
+          </Tooltip>
+        )}
+        {!templateMode && (
+          <Tooltip label={upgradeLabel} disabled={hasBases} position="right">
+            <Menu.Item
+              leftSection={<IconLayoutKanban size={16} />}
+              aria-disabled={!hasBases}
+              closeMenuOnClick={hasBases}
+              style={{ opacity: hasBases ? undefined : 0.7 }}
+              rightSection={!hasBases && <UpgradeBadge />}
+              onClick={() => {
+                if (hasBases) insertBaseEmbedBlock(editor, { template: "kanban" });
+              }}
+            >
+              {t("Kanban")}
+            </Menu.Item>
+          </Tooltip>
+        )}
+        {!templateMode && (
+          <Tooltip label={upgradeLabel} disabled={hasBases} position="right">
+            <Menu.Item
+              leftSection={<IconCalendarMonth size={16} />}
+              aria-disabled={!hasBases}
+              closeMenuOnClick={hasBases}
+              style={{ opacity: hasBases ? undefined : 0.7 }}
+              rightSection={!hasBases && <UpgradeBadge />}
+              onClick={() => {
+                if (hasBases) insertBaseEmbedBlock(editor, { template: "calendar" });
+              }}
+            >
+              {t("Calendar")}
+            </Menu.Item>
+          </Tooltip>
+        )}
+        {!templateMode && isBetaBaseForms() && (
+          <Tooltip label={upgradeLabel} disabled={hasBases} position="right">
+            <Menu.Item
+              leftSection={<IconForms size={16} />}
+              aria-disabled={!hasBases}
+              closeMenuOnClick={hasBases}
+              style={{ opacity: hasBases ? undefined : 0.7 }}
+              rightSection={!hasBases && <UpgradeBadge />}
+              onClick={() => {
+                if (hasBases) insertBaseEmbedBlock(editor, { template: "form" });
+              }}
+            >
+              {t("Form")}
+            </Menu.Item>
+          </Tooltip>
+        )}
+
+        <Menu.Divider />
+        <Menu.Label>{t("Diagrams")}</Menu.Label>
+        <Menu.Item
+          leftSection={<IconMermaid size={16} />}
+          onClick={() =>
+            editor
+              .chain()
+              .focus()
+              .setCodeBlock({ language: "mermaid" })
+              .insertContent("flowchart LR\n    A --> B")
+              .run()
+          }
+        >
+          {t("Mermaid diagram")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconDrawio size={16} />}
+          onClick={() => editor.chain().focus().setDrawio().run()}
+        >
+          Draw.io
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconExcalidraw size={16} />}
+          onClick={() => editor.chain().focus().setExcalidraw().run()}
+        >
+          Excalidraw
+        </Menu.Item>
+
+        <Menu.Divider />
+        <Menu.Label>{t("Embeds")}</Menu.Label>
+        <Menu.Item
+          leftSection={<IconAppWindow size={16} />}
+          onClick={() => setEmbed("iframe")}
+        >
+          Iframe
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<YoutubeIcon size={16} />}
+          onClick={() => setEmbed("youtube")}
+        >
+          YouTube
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<VimeoIcon size={16} />}
+          onClick={() => setEmbed("vimeo")}
+        >
+          Vimeo
+        </Menu.Item>
+        <Menu.Item leftSection={<LoomIcon size={16} />} onClick={() => setEmbed("loom")}>
+          Loom
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<FigmaIcon size={16} />}
+          onClick={() => setEmbed("figma")}
+        >
+          Figma
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<AirtableIcon size={16} />}
+          onClick={() => setEmbed("airtable")}
+        >
+          Airtable
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<TypeformIcon size={16} />}
+          onClick={() => setEmbed("typeform")}
+        >
+          Typeform
+        </Menu.Item>
+        <Menu.Item leftSection={<MiroIcon size={16} />} onClick={() => setEmbed("miro")}>
+          Miro
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<FramerIcon size={16} />}
+          onClick={() => setEmbed("framer")}
+        >
+          Framer
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<GoogleDriveIcon size={16} />}
+          onClick={() => setEmbed("gdrive")}
+        >
+          Google Drive
+        </Menu.Item>
+
+        <Menu.Divider />
+        <Menu.Label>{t("Utility")}</Menu.Label>
+        {templateMode && (
+          <Menu.Item
+            leftSection={<IconVariable size={16} />}
+            disabled={!editor.can().insertTemplateVariable?.()}
+            onClick={() => editor.commands.insertTemplateVariable()}
+          >
+            {t("Variable")}
+          </Menu.Item>
+        )}
+        <Menu.Item
+          leftSection={<IconCalendar size={16} />}
+          onClick={() => editor.chain().focus().insertDate().run()}
+        >
+          {t("Date")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconMathFunction size={16} />}
+          onClick={() => editor.chain().focus().setMathInline().run()}
+        >
+          {t("Math inline")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconMath size={16} />}
+          onClick={() => editor.chain().focus().setMathBlock().run()}
+        >
+          {t("Math block")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconSuperscript size={16} />}
+          onClick={() => editor.chain().focus().addFootnote().run()}
+        >
+          {t("Footnote")}
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  );
+};

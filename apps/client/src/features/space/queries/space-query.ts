@@ -1,0 +1,393 @@
+import {
+  keepPreviousData,
+  QueryClient,
+  queryOptions,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  UseQueryResult,
+} from "@tanstack/react-query";
+import {
+  IAddSpaceMember,
+  IChangeSpaceMemberRole,
+  IRemoveSpaceMember,
+  ISpace,
+} from "@/features/space/types/space.types";
+import {
+  addSpaceMember,
+  changeMemberRole,
+  getSpaceById,
+  getSpaceMembers,
+  getSpaces,
+  removeSpaceMember,
+  createSpace,
+  updateSpace,
+  deleteSpace,
+  archiveSpace,
+  unarchiveSpace,
+} from "@/features/space/services/space-service.ts";
+import { notifications } from "@mantine/notifications";
+import { IPagination, QueryParams } from "@/lib/types.ts";
+import { useTranslation } from "react-i18next";
+import { queryClient } from "@/main.tsx";
+import { prefetchRecentChanges } from "@/features/page/queries/page-query.ts";
+import { useEffect } from "react";
+import { getApiErrorMessage } from "@/lib/api-error.ts";
+import { validate as isValidUuid } from "uuid";
+
+const ARCHIVED_PROBE_PARAMS: QueryParams = { status: "archived", limit: 1 };
+
+const spacesQuery = (params?: QueryParams) =>
+  queryOptions({
+    queryKey: ["spaces", params],
+    queryFn: () => getSpaces(params),
+    placeholderData: keepPreviousData,
+    refetchOnMount: true,
+  });
+
+export function useGetSpacesQuery(
+  params?: QueryParams,
+): UseQueryResult<IPagination<ISpace>, Error> {
+  return useQuery(spacesQuery(params));
+}
+
+export const SPACES_PAGE_SIZE = 40;
+
+// The spaces page opens on the first page of active spaces, unfiltered.
+export function prefetchSpacesPage() {
+  void queryClient.prefetchQuery(
+    spacesQuery({ limit: SPACES_PAGE_SIZE, query: "", status: "active" }),
+  );
+}
+
+export function useHasArchivedSpaces(enabled: boolean): boolean {
+  const { data } = useQuery({
+    queryKey: ["spaces", ARCHIVED_PROBE_PARAMS],
+    queryFn: () => getSpaces(ARCHIVED_PROBE_PARAMS),
+    enabled,
+  });
+  return (data?.items.length ?? 0) > 0;
+}
+
+export function useSpaceQuery(spaceId: string): UseQueryResult<ISpace, Error> {
+  const query = useQuery({
+    queryKey: ["space", spaceId],
+    queryFn: () => getSpaceById(spaceId),
+    enabled: !!spaceId,
+  });
+  useEffect(() => {
+    if (query.data) {
+      if (isValidUuid(spaceId)) {
+        queryClient.setQueryData(["space", query.data.slug], query.data);
+      } else {
+        queryClient.setQueryData(["space", query.data.id], query.data);
+      }
+    }
+  }, [query.data]);
+
+  return query;
+}
+
+export function useUnlistedSpaceQuery(
+  spaceId: string | null | undefined,
+  spaces: ISpace[] | undefined,
+): UseQueryResult<ISpace, Error> {
+  const isUnlisted =
+    !!spaceId && !!spaces && !spaces.some((space) => space.id === spaceId);
+  return useSpaceQuery(isUnlisted ? spaceId : null);
+}
+
+export const prefetchSpace = (spaceSlug: string, spaceId?: string) => {
+  queryClient.prefetchQuery({
+    queryKey: ["space", spaceSlug],
+    queryFn: () => getSpaceById(spaceSlug),
+  });
+
+  if (spaceId) {
+    // this endpoint only accepts uuid for now
+    prefetchRecentChanges(spaceId);
+  }
+};
+
+export function useCreateSpaceMutation() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation<ISpace, Error, Partial<ISpace>>({
+    mutationFn: (data) => createSpace(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["spaces"],
+      });
+      notifications.show({ message: t("Space created successfully") });
+    },
+    onError: (error) => {
+      notifications.show({
+        message: getApiErrorMessage(error, t("Something went wrong")),
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useGetSpaceBySlugQuery(
+  spaceId: string,
+  options?: { staleTime?: number; refetchOnMount?: boolean | "always" },
+): UseQueryResult<ISpace, Error> {
+  return useQuery({
+    queryKey: ["space", spaceId],
+    queryFn: () => getSpaceById(spaceId),
+    enabled: !!spaceId,
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
+}
+
+export function useUpdateSpaceMutation() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation<ISpace, Error, Partial<ISpace>>({
+    mutationFn: (data) => updateSpace(data),
+    onSuccess: (data, variables) => {
+      notifications.show({ message: t("Space updated successfully") });
+
+      const space = queryClient.getQueryData([
+        "space",
+        variables.spaceId,
+      ]) as ISpace;
+      if (space) {
+        const updatedSpace = { ...space, ...data };
+        queryClient.setQueryData(["space", variables.spaceId], updatedSpace);
+        queryClient.setQueryData(["space", data.slug], updatedSpace);
+      }
+      // a URL slug in another letter case caches the same space under its own key
+      queryClient.setQueriesData<ISpace>(
+        {
+          queryKey: ["space"],
+          predicate: (query) =>
+            (query.state.data as ISpace | undefined)?.id === data.id,
+        },
+        (cached) => ({ ...cached, ...data }),
+      );
+
+      queryClient.invalidateQueries({
+        queryKey: ["spaces"],
+      });
+    },
+    onError: (error) => {
+      notifications.show({
+        message: getApiErrorMessage(error, t("Something went wrong")),
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useDeleteSpaceMutation() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: (data: Partial<ISpace>) => deleteSpace(data.id),
+    onSuccess: (data, variables) => {
+      notifications.show({ message: t("Space deleted successfully") });
+
+      if (variables.slug) {
+        queryClient.removeQueries({
+          queryKey: ["space", variables.slug],
+          exact: true,
+        });
+      }
+
+      // Remove space-specific queries
+      if (variables.id) {
+        queryClient.removeQueries({
+          queryKey: ["space", variables.id],
+          exact: true,
+        });
+
+        // Invalidate recent changes
+        queryClient.invalidateQueries({
+          queryKey: ["recent-changes"],
+        });
+
+        queryClient.invalidateQueries({
+          queryKey: ["recent-changes", variables.id],
+        });
+      }
+
+      // Update spaces list cache
+      /* const spaces = queryClient.getQueryData(["spaces"]) as any;
+      if (spaces) {
+        spaces.items = spaces.items?.filter(
+          (space: ISpace) => space.id !== variables.id,
+        );
+        queryClient.setQueryData(["spaces"], spaces);
+      }*/
+
+      // Invalidate all spaces queries to refresh lists
+      queryClient.invalidateQueries({
+        predicate: (item) => ["spaces"].includes(item.queryKey[0] as string),
+      });
+    },
+    onError: (error) => {
+      notifications.show({
+        message: getApiErrorMessage(error, t("Something went wrong")),
+        color: "red",
+      });
+    },
+  });
+}
+
+const ARCHIVE_REFRESHED_QUERIES = [
+  "spaces",
+  "recent-changes",
+  "favorites",
+  "unified-search",
+  "pages-created-by-user",
+  "published-spaces",
+  "templates",
+  "verification-list",
+  "label-pages",
+  "workspace-labels",
+  "search-suggestion",
+];
+
+export function applySpaceArchiveChange(
+  queryClient: QueryClient,
+  spaceId: string,
+  archivedAt: Date | null,
+  archivedBy: ISpace["archivedBy"],
+) {
+  // patch every cached copy (keyed by id or slug) so membership fields survive
+  queryClient.setQueriesData<ISpace>({ queryKey: ["space"] }, (cached) =>
+    cached?.id === spaceId ? { ...cached, archivedAt, archivedBy } : undefined,
+  );
+
+  // refetchOnMount is off app-wide, so inactive copies are dropped to load fresh
+  const refreshed = (item: { queryKey: readonly unknown[] }) =>
+    ARCHIVE_REFRESHED_QUERIES.includes(item.queryKey[0] as string);
+  queryClient.removeQueries({ predicate: refreshed, type: "inactive" });
+  queryClient.invalidateQueries({ predicate: refreshed });
+}
+
+function useArchiveStateMutation(
+  mutationFn: (spaceId: string) => Promise<ISpace>,
+  successMessage: string,
+) {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation<ISpace, Error, string>({
+    mutationFn,
+    onSuccess: (data) => {
+      notifications.show({ message: successMessage });
+      applySpaceArchiveChange(
+        queryClient,
+        data.id,
+        data.archivedAt,
+        data.archivedBy ?? null,
+      );
+    },
+    onError: (error) => {
+      notifications.show({
+        message: getApiErrorMessage(error, t("Something went wrong")),
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useArchiveSpaceMutation() {
+  const { t } = useTranslation();
+
+  return useArchiveStateMutation(archiveSpace, t("Space archived"));
+}
+
+export function useUnarchiveSpaceMutation() {
+  const { t } = useTranslation();
+
+  return useArchiveStateMutation(unarchiveSpace, t("Space restored"));
+}
+
+export function useSpaceMembersInfiniteQuery(
+  spaceId: string,
+  query?: string,
+) {
+  return useInfiniteQuery({
+    queryKey: ["spaceMembers", spaceId, query],
+    queryFn: ({ pageParam }) =>
+      getSpaceMembers(spaceId, { cursor: pageParam, limit: 50, query }),
+    enabled: !!spaceId,
+    placeholderData: keepPreviousData,
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.hasNextPage ? lastPage.meta.nextCursor : undefined,
+  });
+}
+
+export function useAddSpaceMemberMutation() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation<void, Error, IAddSpaceMember>({
+    mutationFn: (data) => addSpaceMember(data),
+    onSuccess: (data, variables) => {
+      notifications.show({ message: t("Members added successfully") });
+      queryClient.invalidateQueries({
+        queryKey: ["spaceMembers", variables.spaceId],
+      });
+    },
+    onError: (error) => {
+      notifications.show({
+        message: getApiErrorMessage(error, t("Something went wrong")),
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useRemoveSpaceMemberMutation() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation<void, Error, IRemoveSpaceMember>({
+    mutationFn: (data) => removeSpaceMember(data),
+    onSuccess: (data, variables) => {
+      notifications.show({ message: t("Member removed successfully") });
+      queryClient.invalidateQueries({
+        queryKey: ["spaceMembers", variables.spaceId],
+      });
+    },
+    onError: (error) => {
+      notifications.show({
+        message: getApiErrorMessage(error, t("Something went wrong")),
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useChangeSpaceMemberRoleMutation() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation<void, Error, IChangeSpaceMemberRole>({
+    mutationFn: (data) => changeMemberRole(data),
+    onSuccess: (data, variables) => {
+      notifications.show({ message: t("Member role updated successfully") });
+      // due to pagination levels, change in cache instead
+      queryClient.refetchQueries({
+        queryKey: ["spaceMembers", variables.spaceId],
+      });
+    },
+    onError: (error) => {
+      notifications.show({
+        message: getApiErrorMessage(error, t("Something went wrong")),
+        color: "red",
+      });
+    },
+  });
+}

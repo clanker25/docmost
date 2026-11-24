@@ -1,0 +1,944 @@
+import { getEditorUploadTarget } from "@/features/editor/utils/upload-target";
+import {
+  IconBlockquote,
+  IconCaretRightFilled,
+  IconCheckbox,
+  IconCode,
+  IconH1,
+  IconH2,
+  IconH3,
+  IconInfoCircle,
+  IconForms,
+  IconLayoutKanban,
+  IconLayoutNavbar,
+  IconList,
+  IconListNumbers,
+  IconMath,
+  IconMathFunction,
+  IconMovie,
+  IconMusic,
+  IconPaperclip,
+  IconFileTypePdf,
+  IconPhoto,
+  IconTable,
+  IconTypography,
+  IconCursorText,
+  IconMenu4,
+  IconPageBreak,
+  IconCalendar,
+  IconCalendarMonth,
+  IconClock,
+  IconClockHour3,
+  IconAppWindow,
+  IconSitemap,
+  IconColumns3,
+  IconColumns2,
+  IconTag,
+  IconTags,
+  IconVariable,
+  IconMoodSmile,
+  IconRotate2,
+  IconSuperscript,
+} from "@tabler/icons-react";
+import {
+  CommandProps,
+  SlashMenuGroupedItemsType,
+} from "@/features/editor/components/slash-menu/types";
+import type { Editor } from "@tiptap/core";
+import { uploadImageAction } from "@/features/editor/components/image/upload-image-action.tsx";
+import { uploadVideoAction } from "@/features/editor/components/video/upload-video-action.tsx";
+import { uploadAudioAction } from "@/features/editor/components/audio/upload-audio-action.tsx";
+import { uploadAttachmentAction } from "@/features/editor/components/attachment/upload-attachment-action.tsx";
+import { uploadPdfAction } from "@/features/editor/components/pdf/upload-pdf-action.tsx";
+import IconExcalidraw from "@/components/icons/icon-excalidraw";
+import IconMermaid from "@/components/icons/icon-mermaid";
+import IconDrawio from "@/components/icons/icon-drawio";
+import { IconColumns4 } from "@/components/icons/icon-columns-4";
+import { IconColumns5 } from "@/components/icons/icon-columns-5";
+import i18n from "@/i18n.ts";
+import { isBetaBaseForms } from "@/lib/config.ts";
+import {
+  AirtableIcon,
+  FigmaIcon,
+  FramerIcon,
+  GoogleDriveIcon,
+  LoomIcon,
+  Microsoft365Icon,
+  MiroIcon,
+  TypeformIcon,
+  VimeoIcon,
+  YoutubeIcon,
+} from "@/components/icons";
+import { insertBaseEmbedBlock } from "@/features/editor/components/base-embed/insert-base-embed";
+import { notifications } from "@mantine/notifications";
+import { isIntegrationInstalled } from "@/features/integration/utils/installed-integrations";
+import { requestMicrosoftPicker } from "@/features/microsoft/atoms/microsoft-atoms";
+import { isCloud } from "@/lib/config";
+
+const CommandGroups: SlashMenuGroupedItemsType = {
+  basic: [
+    {
+      title: "Text",
+      description: "Just start typing with plain text.",
+      searchTerms: ["p", "paragraph"],
+      icon: IconTypography,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .toggleNode("paragraph", "paragraph")
+          .run();
+      },
+    },
+    {
+      title: "Placeholder text",
+      description: "Show an instruction until someone types here.",
+      searchTerms: ["placeholder", "instruction", "hint"],
+      icon: IconCursorText,
+      disable: (editor) => !editor.can().editTemplatePlaceholder?.(),
+      command: ({ editor, range }) => {
+        editor.chain().deleteRange(range).editTemplatePlaceholder().run();
+      },
+    },
+    {
+      title: "Variable",
+      description: "Fill in a named field when using this template.",
+      searchTerms: ["variable", "field", "prefill"],
+      icon: IconVariable,
+      disable: (editor) => !editor.can().insertTemplateVariable?.(),
+      command: ({ editor, range }) => {
+        editor.chain().deleteRange(range).insertTemplateVariable().run();
+      },
+    },
+    {
+      title: "To-do list",
+      description: "Track tasks with a to-do list.",
+      searchTerms: ["todo", "task", "list", "check", "checkbox"],
+      icon: IconCheckbox,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).toggleTaskList().run();
+      },
+    },
+    {
+      title: "Heading 1",
+      description: "Big section heading.",
+      searchTerms: ["title", "big", "large"],
+      icon: IconH1,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setNode("heading", { level: 1 })
+          .run();
+      },
+    },
+    {
+      title: "Heading 2",
+      description: "Medium section heading.",
+      searchTerms: ["subtitle", "medium"],
+      icon: IconH2,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setNode("heading", { level: 2 })
+          .run();
+      },
+    },
+    {
+      title: "Heading 3",
+      description: "Small section heading.",
+      searchTerms: ["subtitle", "small"],
+      icon: IconH3,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setNode("heading", { level: 3 })
+          .run();
+      },
+    },
+    {
+      title: "Bullet list",
+      description: "Create a simple bullet list.",
+      searchTerms: ["unordered", "point", "list"],
+      icon: IconList,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).toggleBulletList().run();
+      },
+    },
+    {
+      title: "Numbered list",
+      description: "Create a list with numbering.",
+      searchTerms: ["numbered", "ordered", "list", "ol"],
+      icon: IconListNumbers,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).toggleOrderedList().run();
+      },
+    },
+    {
+      title: "Quote",
+      description: "Create block quote.",
+      searchTerms: ["blockquote", "quotes"],
+      icon: IconBlockquote,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).toggleBlockquote().run(),
+    },
+    {
+      title: "Code",
+      description: "Insert code snippet.",
+      searchTerms: ["codeblock"],
+      icon: IconCode,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).toggleCodeBlock().run(),
+    },
+    {
+      title: "Divider",
+      description: "Insert horizontal rule divider",
+      searchTerms: ["horizontal rule", "hr"],
+      icon: IconMenu4,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
+    },
+    {
+      title: "Page break",
+      description: "Insert a page break for printing.",
+      searchTerms: ["page", "break", "pagebreak", "print"],
+      icon: IconPageBreak,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).setPageBreak().run(),
+    },
+    {
+      title: "Footnote",
+      description: "Insert a footnote reference.",
+      searchTerms: ["footnote", "reference", "citation", "note"],
+      icon: IconSuperscript,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).run();
+        editor.commands.addFootnote();
+      },
+    },
+    {
+      title: "Image",
+      description: "Upload any image from your device.",
+      searchTerms: ["photo", "picture", "media", "file", "attachment"],
+      icon: IconPhoto,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run();
+
+        const uploadTarget = getEditorUploadTarget(editor);
+        if (!uploadTarget) return;
+
+        // upload image
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/*";
+        input.multiple = true;
+        input.style.display = "none";
+        document.body.appendChild(input);
+        input.onchange = async () => {
+          if (input.files?.length) {
+            for (const file of input.files) {
+              const pos = editor.view.state.selection.from;
+
+              uploadImageAction(file, editor, pos, uploadTarget);
+            }
+          }
+
+          input.remove();
+        };
+        input.click();
+      },
+    },
+    {
+      title: "Video",
+      description: "Upload any video from your device.",
+      searchTerms: ["video", "mp4", "media", "file", "attachment"],
+      icon: IconMovie,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run();
+
+        const uploadTarget = getEditorUploadTarget(editor);
+        if (!uploadTarget) return;
+
+        // upload video
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "video/*";
+        input.multiple = true;
+        input.style.display = "none";
+        document.body.appendChild(input);
+        input.onchange = async () => {
+          if (input.files?.length) {
+            for (const file of input.files) {
+              const pos = editor.view.state.selection.from;
+
+              uploadVideoAction(file, editor, pos, uploadTarget);
+            }
+          }
+
+          input.remove();
+        };
+        input.click();
+      },
+    },
+    {
+      title: "Audio",
+      description: "Upload any audio from your device.",
+      searchTerms: [
+        "audio",
+        "music",
+        "sound",
+        "mp3",
+        "media",
+        "file",
+        "attachment",
+      ],
+      icon: IconMusic,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run();
+
+        const uploadTarget = getEditorUploadTarget(editor);
+        if (!uploadTarget) return;
+
+        // upload audio
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "audio/*";
+        input.multiple = true;
+        input.style.display = "none";
+        document.body.appendChild(input);
+        input.onchange = async () => {
+          if (input.files?.length) {
+            for (const file of input.files) {
+              const pos = editor.view.state.selection.from;
+
+              uploadAudioAction(file, editor, pos, uploadTarget);
+            }
+          }
+
+          input.remove();
+        };
+        input.click();
+      },
+    },
+    {
+      title: "Embed PDF",
+      description: "Upload and embed a PDF file.",
+      searchTerms: ["pdf", "document", "embed"],
+      icon: IconFileTypePdf,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run();
+
+        const uploadTarget = getEditorUploadTarget(editor);
+        if (!uploadTarget) return;
+
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "application/pdf";
+        input.style.display = "none";
+        document.body.appendChild(input);
+        input.onchange = async () => {
+          if (input.files?.length) {
+            for (const file of input.files) {
+              const pos = editor.view.state.selection.from;
+
+              uploadPdfAction(file, editor, pos, uploadTarget);
+            }
+          }
+
+          input.remove();
+        };
+        input.click();
+      },
+    },
+    {
+      title: "File attachment",
+      description: "Upload any file from your device.",
+      searchTerms: ["file", "attachment", "upload", "csv", "zip"],
+      icon: IconPaperclip,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run();
+
+        const uploadTarget = getEditorUploadTarget(editor);
+        if (!uploadTarget) return;
+
+        // upload file
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "";
+        input.multiple = true;
+        input.style.display = "none";
+        document.body.appendChild(input);
+        input.onchange = async () => {
+          if (input.files?.length) {
+            for (const file of input.files) {
+              const pos = editor.view.state.selection.from;
+
+              uploadAttachmentAction(file, editor, pos, uploadTarget, true);
+            }
+          }
+
+          input.remove();
+        };
+        input.click();
+      },
+    },
+    {
+      title: "Table",
+      description: "Insert a table.",
+      searchTerms: ["table", "rows", "columns"],
+      icon: IconTable,
+      command: ({ editor, range }: CommandProps) =>
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+          .run(),
+    },
+    {
+      title: "Base (Inline)",
+      description: "Insert an inline base on this page",
+      searchTerms: ["base", "database", "table", "grid", "spreadsheet"],
+      icon: IconTable,
+      requiresBases: true,
+      command: ({ editor, range }: CommandProps) => {
+        insertBaseEmbedBlock(editor, { range });
+      },
+    },
+    {
+      title: "Kanban",
+      description: "Insert a kanban board on this page",
+      searchTerms: ["kanban", "board", "cards", "status", "task", "database"],
+      icon: IconLayoutKanban,
+      requiresBases: true,
+      command: ({ editor, range }: CommandProps) => {
+        insertBaseEmbedBlock(editor, { range, template: "kanban" });
+      },
+    },
+    {
+      title: "Calendar",
+      description: "Insert a calendar on this page",
+      searchTerms: ["calendar", "schedule", "events", "planner", "database"],
+      icon: IconCalendarMonth,
+      requiresBases: true,
+      command: ({ editor, range }: CommandProps) => {
+        insertBaseEmbedBlock(editor, { range, template: "calendar" });
+      },
+    },
+    {
+      title: "Form",
+      description: "Insert a form that collects responses into a base",
+      searchTerms: ["form", "survey", "questionnaire", "responses", "database"],
+      icon: IconForms,
+      requiresBases: true,
+      disable: () => !isBetaBaseForms(),
+      command: ({ editor, range }: CommandProps) => {
+        insertBaseEmbedBlock(editor, { range, template: "form" });
+      },
+    },
+    {
+      title: "Toggle block",
+      description: "Insert collapsible block.",
+      searchTerms: ["collapsible", "block", "toggle", "details", "expand"],
+      icon: IconCaretRightFilled,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).setDetails().run(),
+    },
+    {
+      title: "Tabs",
+      description: "Insert a multi-tab content block.",
+      searchTerms: ["tabs", "tabbed", "multi", "panel"],
+      icon: IconLayoutNavbar,
+      disable: (editor) => !editor.can().insertTabs(),
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).insertTabs().run(),
+    },
+    {
+      title: "Callout",
+      description: "Insert callout notice.",
+      searchTerms: [
+        "callout",
+        "notice",
+        "panel",
+        "info",
+        "warning",
+        "success",
+        "error",
+        "danger",
+      ],
+      icon: IconInfoCircle,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).toggleCallout().run(),
+    },
+    {
+      title: "Math inline",
+      description: "Insert inline math equation.",
+      searchTerms: [
+        "math",
+        "inline",
+        "mathinline",
+        "inlinemath",
+        "inline math",
+        "equation",
+        "katex",
+        "latex",
+        "tex",
+      ],
+      icon: IconMathFunction,
+      command: ({ editor, range }: CommandProps) =>
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setMathInline()
+          .setNodeSelection(range.from)
+          .run(),
+    },
+    {
+      title: "Math block",
+      description: "Insert math equation",
+      searchTerms: [
+        "math",
+        "block",
+        "mathblock",
+        "block math",
+        "equation",
+        "katex",
+        "latex",
+        "tex",
+      ],
+      icon: IconMath,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).setMathBlock().run(),
+    },
+    {
+      title: "Mermaid diagram",
+      description: "Insert mermaid diagram",
+      searchTerms: ["mermaid", "diagrams", "chart", "uml"],
+      icon: IconMermaid,
+      command: ({ editor, range }: CommandProps) =>
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setCodeBlock({ language: "mermaid" })
+          .insertContent("flowchart LR\n" + "    A --> B")
+          .run(),
+    },
+    {
+      title: "Draw.io (diagrams.net)",
+      description: "Insert and design Drawio diagrams",
+      searchTerms: ["drawio", "diagrams", "charts", "uml", "whiteboard"],
+      icon: IconDrawio,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).setDrawio().run(),
+    },
+    {
+      title: "Excalidraw (Whiteboard)",
+      description: "Draw and sketch excalidraw diagrams",
+      searchTerms: ["diagrams", "draw", "sketch", "whiteboard"],
+      icon: IconExcalidraw,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).setExcalidraw().run(),
+    },
+    {
+      title: "Date",
+      description: "Pick a date",
+      searchTerms: ["Today", "Calendar"],
+      icon: IconCalendar,
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).insertDate().run(),
+    },
+    {
+      title: "Time",
+      description: "Insert current time",
+      searchTerms: ["time", "now", "clock"],
+      icon: IconClock,
+      command: ({ editor, range }: CommandProps) => {
+        const currentTime = new Date().toLocaleTimeString(i18n.language, {
+          hour: "numeric",
+          minute: "numeric",
+        });
+
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent(currentTime)
+          .run();
+      },
+    },
+    {
+      title: "Status",
+      description: "Insert inline status badge.",
+      searchTerms: ["status", "badge", "label", "lozenge"],
+      icon: IconTag,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setStatus({ text: "", color: "gray" })
+          .run();
+      },
+    },
+    {
+      title: "Emoji",
+      description: "Insert emoji.",
+      searchTerms: ["emoji", "icon", "smiley", "emoticon", "symbol", "reaction"],
+      icon: IconMoodSmile,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).insertContent(":").run();
+      },
+    },
+    {
+      title: "Subpages (Child pages)",
+      description: "List all subpages of the current page",
+      searchTerms: [
+        "subpages",
+        "child",
+        "children",
+        "nested",
+        "hierarchy",
+        "toc",
+      ],
+      icon: IconSitemap,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).insertSubpages().run();
+      },
+    },
+    {
+      title: "Recently updated",
+      description: "List recently updated pages",
+      searchTerms: ["recent pages", "updates", "activity", "recently-updated"],
+      icon: IconClockHour3,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).insertRecentlyUpdated().run();
+      },
+    },
+    {
+      title: "Pages by label",
+      description: "List pages that match selected labels.",
+      searchTerms: ["tags", "labels", "pages", "content by label"],
+      icon: IconTags,
+      command: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).insertItemsByLabel().run();
+      },
+    },
+    {
+      title: "Synced block",
+      description: "Create a block that stays in sync across pages.",
+      searchTerms: [
+        "sync",
+        "synced",
+        "synced block",
+        "excerpt",
+        "transclusion",
+        "reusable",
+        "snippet",
+      ],
+      icon: IconRotate2,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertTransclusionSource()
+          .run();
+      },
+    },
+    {
+      title: "2 Columns",
+      description: "Split content into two columns.",
+      searchTerms: ["columns", "layout", "split", "side"],
+      icon: IconColumns2,
+      command: ({ editor, range }: CommandProps) =>
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertColumns({ layout: "two_equal" })
+          .run(),
+    },
+    {
+      title: "3 Columns",
+      description: "Split content into three columns.",
+      searchTerms: ["columns", "layout", "split", "triple"],
+      icon: IconColumns3,
+      command: ({ editor, range }: CommandProps) =>
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertColumns({ layout: "three_equal" })
+          .run(),
+    },
+    {
+      title: "4 Columns",
+      description: "Split content into four columns.",
+      searchTerms: ["columns", "layout", "split"],
+      icon: IconColumns4,
+      command: ({ editor, range }: CommandProps) =>
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertColumns({ layout: "four_equal" })
+          .run(),
+    },
+    {
+      title: "5 Columns",
+      description: "Split content into five columns.",
+      searchTerms: ["columns", "layout", "split"],
+      icon: IconColumns5,
+      command: ({ editor, range }: CommandProps) =>
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertColumns({ layout: "five_equal" })
+          .run(),
+    },
+    {
+      title: "Iframe embed",
+      description: "Embed any Iframe",
+      searchTerms: ["iframe"],
+      icon: IconAppWindow,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setEmbed({ provider: "iframe" })
+          .run();
+      },
+    },
+    {
+      title: "Airtable",
+      description: "Embed Airtable",
+      searchTerms: ["airtable"],
+      icon: AirtableIcon,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setEmbed({ provider: "airtable" })
+          .run();
+      },
+    },
+    {
+      title: "Loom",
+      description: "Embed Loom video",
+      searchTerms: ["loom"],
+      icon: LoomIcon,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setEmbed({ provider: "loom" })
+          .run();
+      },
+    },
+    {
+      title: "Figma",
+      description: "Embed Figma files",
+      searchTerms: ["figma"],
+      icon: FigmaIcon,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setEmbed({ provider: "figma" })
+          .run();
+      },
+    },
+    {
+      title: "Typeform",
+      description: "Embed Typeform",
+      searchTerms: ["typeform"],
+      icon: TypeformIcon,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setEmbed({ provider: "typeform" })
+          .run();
+      },
+    },
+    {
+      title: "Miro",
+      description: "Embed Miro board",
+      searchTerms: ["miro"],
+      icon: MiroIcon,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setEmbed({ provider: "miro" })
+          .run();
+      },
+    },
+    {
+      title: "YouTube",
+      description: "Embed YouTube video",
+      searchTerms: ["youtube", "yt", "media", "video"],
+      icon: YoutubeIcon,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setEmbed({ provider: "youtube" })
+          .run();
+      },
+    },
+    {
+      title: "Vimeo",
+      description: "Embed Vimeo video",
+      searchTerms: ["vimeo"],
+      icon: VimeoIcon,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setEmbed({ provider: "vimeo" })
+          .run();
+      },
+    },
+    {
+      title: "Framer",
+      description: "Embed Framer prototype",
+      searchTerms: ["framer"],
+      icon: FramerIcon,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setEmbed({ provider: "framer" })
+          .run();
+      },
+    },
+    {
+      title: "Google Drive",
+      description: "Embed Google Docs, Sheets, Slides or Drive files",
+      searchTerms: [
+        "google drive",
+        "gdrive",
+        "google docs",
+        "gdocs",
+        "google sheets",
+        "gsheets",
+        "google slides",
+        "gslides",
+      ],
+      icon: GoogleDriveIcon,
+      command: ({ editor, range }: CommandProps) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setEmbed({ provider: "gdrive" })
+          .run();
+      },
+    },
+    {
+      title: "SharePoint file",
+      description: "Embed a SharePoint file",
+      searchTerms: ["sharepoint", "onedrive", "microsoft", "office", "word", "excel", "powerpoint", "m365"],
+      icon: Microsoft365Icon,
+      disable: () => isCloud(),
+      command: ({ editor, range }: CommandProps) => {
+        if (!isIntegrationInstalled("microsoft_365")) {
+          notifications.show({
+            message: i18n.t("Ask a workspace admin to install the Microsoft 365 integration first"),
+            color: "red",
+          });
+          return;
+        }
+        const pendingKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+        requestMicrosoftPicker(pendingKey);
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setMicrosoftFile({ items: [], pendingKey })
+          .run();
+      },
+    },
+  ],
+};
+
+// The editor can turn a typed apostrophe into a smart quote while searching.
+const normalizeSearchText = (value: string) =>
+  value.toLowerCase().replace(/[‘’]/g, "'");
+
+export const getSuggestionItems = ({
+  query,
+  editor,
+  excludeItems,
+}: {
+  query: string;
+  editor?: Editor;
+  excludeItems?: Set<string>;
+}): SlashMenuGroupedItemsType => {
+  const search = normalizeSearchText(query);
+  const containsSearch = (value: string) =>
+    normalizeSearchText(value).includes(search);
+  const filteredGroups: SlashMenuGroupedItemsType = {};
+
+  const fuzzyMatch = (query: string, target: string) => {
+    let queryIndex = 0;
+    for (const char of normalizeSearchText(target)) {
+      if (query[queryIndex] === char) queryIndex++;
+      if (queryIndex === query.length) return true;
+    }
+    return false;
+  };
+
+  for (const [group, items] of Object.entries(CommandGroups)) {
+    const filteredItems = items.filter((item) => {
+      if (excludeItems?.has(item.title)) return false;
+      if (editor && item.disable?.(editor)) return false;
+      const translatedTitle = i18n.t(item.title);
+      const translatedDescription = i18n.t(item.description);
+      return (
+        fuzzyMatch(search, item.title) ||
+        fuzzyMatch(search, translatedTitle) ||
+        containsSearch(item.description) ||
+        containsSearch(translatedDescription) ||
+        (item.searchTerms &&
+          item.searchTerms.some(
+            (term: string) =>
+              containsSearch(term) || containsSearch(i18n.t(term)),
+          ))
+      );
+    });
+
+    if (filteredItems.length) {
+      filteredGroups[group] = filteredItems.sort((a, b) => {
+        const aTitle =
+          containsSearch(a.title) || containsSearch(i18n.t(a.title)) ? 0 : 1;
+        const bTitle =
+          containsSearch(b.title) || containsSearch(i18n.t(b.title)) ? 0 : 1;
+        return aTitle - bTitle;
+      });
+    }
+  }
+
+  return filteredGroups;
+};
+
+export default getSuggestionItems;
